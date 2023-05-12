@@ -1,0 +1,5 @@
+# git ignore file
+config.py
+usage.txt
+download.txt
+# EOF
