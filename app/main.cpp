@@ -233,6 +233,12 @@ int main(int argc, char *argv[]) {
     std::vector<std::string> tracer_opts;
     bool tracer_dump_avail = false;
     std::string tracer_avail_out;
+	
+#ifdef __WIN32__
+    WORD versionWanted = MAKEWORD(1, 1);
+    WSADATA wsaData;
+    WSAStartup(versionWanted, &wsaData);
+#endif
     
     while (1) {
         //int this_option_optind = optind ? optind : 1;

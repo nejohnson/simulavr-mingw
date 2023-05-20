@@ -77,8 +77,9 @@ GdbServerSocketUnix::GdbServerSocketUnix(int port) {
     twice in a row, without waiting for the (ip, port) tuple
     to time out. */
     int i = 1;  
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &i, sizeof(i));
-    fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK); //dont know 
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&i, sizeof(i));
+	u_long iMode = 1;
+    ioctlsocket(sock, FIONBIO, &iMode); // non-blocking mode
 
     address->sin_family = AF_INET;
     address->sin_port = htons(port);
@@ -101,14 +102,17 @@ int GdbServerSocketUnix::ReadByte(void) {
     int res;
     int cnt = MAX_READ_RETRY;
 
-    while(cnt--) {
-        res = read(conn, &c, 1);
+    while(1) {
+        res = recv(conn, &c, 1, 0);
         if(res < 0) {
             if (errno == EAGAIN)
                 /* fd was set to non-blocking and no data was available */
                 return -1;
 
-            avr_error("read failed: %s", strerror(errno));
+			int iError = WSAGetLastError();
+            if (iError == WSAEWOULDBLOCK)
+				continue;
+			avr_warning("read failed: %d", iError);
         }
 
         if (res == 0) {
@@ -118,7 +122,7 @@ int GdbServerSocketUnix::ReadByte(void) {
         }
         return c;
     }
-    avr_error("Maximum read reties reached");
+    avr_error("Maximum read retries reached");
 
     return 0; /* make compiler happy */
 }
@@ -126,7 +130,7 @@ int GdbServerSocketUnix::ReadByte(void) {
 void GdbServerSocketUnix::Write(const void* buf, size_t count) {
     int res;
 
-    res = write(conn, buf, count);
+    res = send(conn, (const char*)buf, count, 0);
 
     /* FIXME: should we try and catch interrupted system calls here? */
     if(res < 0)
@@ -141,18 +145,22 @@ void GdbServerSocketUnix::Write(const void* buf, size_t count) {
 void GdbServerSocketUnix::SetBlockingMode(int mode) {
     if(mode) {
         /* turn non-blocking mode off */
-        if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) & ~O_NONBLOCK) < 0)
+		u_long iMode = 0;
+		int iResult = ioctlsocket(sock, FIONBIO, &iMode); // non-blocking mode
+        if(iResult != NO_ERROR)
             avr_warning("fcntl failed: %s\n", strerror(errno));
     } else {
         /* turn non-blocking mode on */
-        if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) | O_NONBLOCK) < 0)
+        u_long iMode = 1;
+		int iResult = ioctlsocket(sock, FIONBIO, &iMode); // non-blocking mode
+        if(iResult != NO_ERROR)
             avr_warning("fcntl failed: %s\n", strerror(errno));
     }
 }
 
 bool GdbServerSocketUnix::Connect(void) {
     /* accept() needs this set, or it fails (sometimes) */
-    socklen_t addrLength = sizeof(struct sockaddr_in);
+    int addrLength = sizeof(struct sockaddr_in);
 
     /* We only want to accept a single connection, thus don't need a loop. */
     /* Wait until we have a connection */
@@ -165,7 +173,7 @@ bool GdbServerSocketUnix::Connect(void) {
         with a single call to write. (see Stevens "Unix Network
         Programming", Vol 1, 2nd Ed, page 202 for more info) */
         int i = 1;
-        setsockopt (conn, IPPROTO_TCP, TCP_NODELAY, &i, sizeof (i));
+        setsockopt (conn, IPPROTO_TCP, TCP_NODELAY, (const char *)&i, sizeof (i));
 
         /* If we got this far, we now have a client connected and can start 
         processing. */

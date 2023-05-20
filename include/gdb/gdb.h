@@ -27,12 +27,16 @@
 #ifndef SIM_GDB_H
 #define SIM_GDB_H
 
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <vector>
+#ifdef __WIN32__
+# include <winsock2.h>
+#else
+# include <sys/socket.h>
+# include <sys/types.h>
+# include <netinet/in.h>
+# include <netinet/tcp.h>
+# include <arpa/inet.h>
+# include <vector>
+#endif
 
 #include "config.h"
 #include "avrdevice.h"
