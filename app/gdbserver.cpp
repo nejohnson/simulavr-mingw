@@ -79,14 +79,14 @@ enum {
 
 GdbServerSocketWin32::GdbServerSocketWin32(int port) {
     conn = -1;        //no connection opened
-    
+
     if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
         avr_error("Can't create socket: %s", strerror(errno));
 
     /* Let the kernel reuse the socket address. This lets us run
     twice in a row, without waiting for the (ip, port) tuple
     to time out. */
-    int i = 1;  
+    int i = 1;
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&i, sizeof(i));
 	u_long iMode = 1;
     ioctlsocket(sock, FIONBIO, &iMode); // non-blocking mode
@@ -201,7 +201,7 @@ void GdbServerSocketWin32::CloseConnection(void) {
 }
 
 #else
-	
+
 /****************************************************************************/
 /****************************************************************************/
 /**                                                                        **/
@@ -251,7 +251,7 @@ int GdbServerSocketUnix::ReadByte(void) {
                 /* fd was set to non-blocking and no data was available */
                 return -1;
 
-			avr_error("read failed: %s", strerror(errno));
+            avr_error("read failed: %s", strerror(errno));
         }
 
         if (res == 0) {
@@ -284,7 +284,7 @@ void GdbServerSocketUnix::Write(const void* buf, size_t count) {
 void GdbServerSocketUnix::SetBlockingMode(int mode) {
     if(mode) {
         /* turn non-blocking mode off */
-		if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) & ~O_NONBLOCK) < 0)
+        if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) & ~O_NONBLOCK) < 0)
             avr_warning("fcntl failed: %s\n", strerror(errno));
     } else {
         /* turn non-blocking mode on */
