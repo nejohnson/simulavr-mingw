@@ -67,7 +67,17 @@ enum {
 };
 #endif /* not DOXYGEN */
 
-GdbServerSocketUnix::GdbServerSocketUnix(int port) {
+#ifdef __WIN32__
+
+/****************************************************************************/
+/****************************************************************************/
+/**                                                                        **/
+/**                   W I N 3 2    S O C K E T S                           **/
+/**                                                                        **/
+/****************************************************************************/
+/****************************************************************************/
+
+GdbServerSocketWin32::GdbServerSocketWin32(int port) {
     conn = -1;        //no connection opened
     
     if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
@@ -92,12 +102,12 @@ GdbServerSocketUnix::GdbServerSocketUnix(int port) {
         avr_error("Can not listen on socket: %s", strerror(errno));
 }
 
-void GdbServerSocketUnix::Close(void) {
+void GdbServerSocketWin32::Close(void) {
     CloseConnection();
     close(sock);
 }
 
-int GdbServerSocketUnix::ReadByte(void) {
+int GdbServerSocketWin32::ReadByte(void) {
     char c;
     int res;
     int cnt = MAX_READ_RETRY;
@@ -127,7 +137,7 @@ int GdbServerSocketUnix::ReadByte(void) {
     return 0; /* make compiler happy */
 }
 
-void GdbServerSocketUnix::Write(const void* buf, size_t count) {
+void GdbServerSocketWin32::Write(const void* buf, size_t count) {
     int res;
 
     res = send(conn, (const char*)buf, count, 0);
@@ -142,7 +152,7 @@ void GdbServerSocketUnix::Write(const void* buf, size_t count) {
         avr_error("write only wrote %d of %lu bytes", res, count);
 }
 
-void GdbServerSocketUnix::SetBlockingMode(int mode) {
+void GdbServerSocketWin32::SetBlockingMode(int mode) {
     if(mode) {
         /* turn non-blocking mode off */
 		u_long iMode = 0;
@@ -158,7 +168,7 @@ void GdbServerSocketUnix::SetBlockingMode(int mode) {
     }
 }
 
-bool GdbServerSocketUnix::Connect(void) {
+bool GdbServerSocketWin32::Connect(void) {
     /* accept() needs this set, or it fails (sometimes) */
     int addrLength = sizeof(struct sockaddr_in);
 
@@ -185,10 +195,141 @@ bool GdbServerSocketUnix::Connect(void) {
         return false;
 }
 
+void GdbServerSocketWin32::CloseConnection(void) {
+    close(conn);
+    conn = -1;
+}
+
+#else
+	
+/****************************************************************************/
+/****************************************************************************/
+/**                                                                        **/
+/**                   U N I X  S O C K E T S                               **/
+/**                                                                        **/
+/****************************************************************************/
+/****************************************************************************/
+
+GdbServerSocketUnix::GdbServerSocketUnix(int port) {
+    conn = -1;        //no connection opened
+    
+    if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
+        avr_error("Can't create socket: %s", strerror(errno));
+
+    /* Let the kernel reuse the socket address. This lets us run
+    twice in a row, without waiting for the (ip, port) tuple
+    to time out. */
+    int i = 1;  
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &i, sizeof(i));
+    fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK); //dont know 
+
+    address->sin_family = AF_INET;
+    address->sin_port = htons(port);
+    memset(&address->sin_addr, 0, sizeof(address->sin_addr));
+
+    if(bind(sock, (struct sockaddr *)address, sizeof(address)))
+        avr_error("Can not bind socket: %s", strerror(errno));
+
+    if(listen(sock, 1) < 0)
+        avr_error("Can not listen on socket: %s", strerror(errno));
+}
+
+void GdbServerSocketUnix::Close(void) {
+    CloseConnection();
+    close(sock);
+}
+
+int GdbServerSocketUnix::ReadByte(void) {
+    char c;
+    int res;
+    int cnt = MAX_READ_RETRY;
+
+    while(cnt--) {
+        res = read(conn, &c, 1);
+        if(res < 0) {
+            if (errno == EAGAIN)
+                /* fd was set to non-blocking and no data was available */
+                return -1;
+
+			avr_error("read failed: %s", strerror(errno));
+        }
+
+        if (res == 0) {
+            usleep(1000);
+            avr_warning("incomplete read\n");
+            continue;
+        }
+        return c;
+    }
+    avr_error("Maximum read reties reached");
+
+    return 0; /* make compiler happy */
+}
+
+void GdbServerSocketUnix::Write(const void* buf, size_t count) {
+    int res;
+
+    res = write(conn, buf, count);
+
+    /* FIXME: should we try and catch interrupted system calls here? */
+    if(res < 0)
+        avr_error("write failed: %s", strerror(errno));
+
+    /* FIXME: if this happens a lot, we could try to resend the
+    unsent bytes. */
+    if((unsigned int)res != count)
+        avr_error("write only wrote %d of %lu bytes", res, count);
+}
+
+void GdbServerSocketUnix::SetBlockingMode(int mode) {
+    if(mode) {
+        /* turn non-blocking mode off */
+		if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) & ~O_NONBLOCK) < 0)
+            avr_warning("fcntl failed: %s\n", strerror(errno));
+    } else {
+        /* turn non-blocking mode on */
+        if(fcntl(conn, F_SETFL, fcntl(conn, F_GETFL, 0) | O_NONBLOCK) < 0)
+            avr_warning("fcntl failed: %s\n", strerror(errno));
+    }
+}
+
+bool GdbServerSocketUnix::Connect(void) {
+    /* accept() needs this set, or it fails (sometimes) */
+    socklen_t addrLength = sizeof(struct sockaddr_in);
+
+    /* We only want to accept a single connection, thus don't need a loop. */
+    /* Wait until we have a connection */
+    conn = accept(sock, (struct sockaddr *)address, &addrLength);
+    if(conn > 0) {
+        /* Tell TCP not to delay small packets.  This greatly speeds up
+        interactive response. WARNING: If TCP_NODELAY is set on, then gdb
+        may timeout in mid-packet if the (gdb)packet is not sent within a
+        single (tcp)packet, thus all outgoing (gdb)packets _must_ be sent
+        with a single call to write. (see Stevens "Unix Network
+        Programming", Vol 1, 2nd Ed, page 202 for more info) */
+        int i = 1;
+        setsockopt (conn, IPPROTO_TCP, TCP_NODELAY, &i, sizeof (i));
+
+        /* If we got this far, we now have a client connected and can start 
+        processing. */
+        fprintf(stderr, "Connection opened by host %s, port %hu.\n",
+                inet_ntoa(address->sin_addr), ntohs(address->sin_port));
+
+        return true;
+    } else
+        return false;
+}
+
 void GdbServerSocketUnix::CloseConnection(void) {
     close(conn);
     conn = -1;
 }
+
+#endif /* __WIN32__ */
+
+/****************************************************************************/
+/****************************************************************************/
+/****************************************************************************/
 
 GdbServer::GdbServer(AvrDevice *c, int _port, int debug, int _waitForGdbConnection):
     core(c),
@@ -202,7 +343,11 @@ GdbServer::GdbServer(AvrDevice *c, int _port, int debug, int _waitForGdbConnecti
     connState = false;
     m_gdb_thread_id = 1;  // we start with the first thread already created
 
+#ifdef __WIN32__
+	server = new GdbServerSocketWin32(_port);
+#else
     server = new GdbServerSocketUnix(_port);
+#endif
 
     fprintf(stderr, "Waiting on port %d for gdb client to connect...\n", _port);
 

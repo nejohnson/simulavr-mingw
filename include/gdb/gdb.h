@@ -64,6 +64,28 @@ class GdbServerSocket {
         virtual ~GdbServerSocket() {}
 };
 
+#ifdef __WIN32__
+
+//! Interface implementation for server socket wrapper on Win32 systems
+class GdbServerSocketWin32: public GdbServerSocket {
+    private:
+        int sock;       //!< socket for listening for a new client
+        int conn;       //!< the TCP connection from gdb client
+        struct sockaddr_in address[1];
+
+    public:
+        GdbServerSocketWin32(int port);
+        ~GdbServerSocketWin32() {}
+        virtual void Close(void);
+        virtual int ReadByte(void);
+        virtual void Write(const void* buf, size_t count);
+        virtual void SetBlockingMode(int mode);
+        virtual bool Connect(void);
+        virtual void CloseConnection(void);
+};
+
+#else
+
 //! Interface implementation for server socket wrapper on unix systems
 class GdbServerSocketUnix: public GdbServerSocket {
     private:
@@ -81,6 +103,8 @@ class GdbServerSocketUnix: public GdbServerSocket {
         virtual bool Connect(void);
         virtual void CloseConnection(void);
 };
+
+#endif
 
 //! GDB server instance to give the possibility to debug target by debugger
 class GdbServer: public SimulationMember {

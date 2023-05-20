@@ -204,7 +204,30 @@ void doUsage(void) {
     }
 }
 
+int main2(int, char *[]);
+
 int main(int argc, char *argv[]) {
+	
+#ifdef __WIN32__
+	/* Initialise Winsock */
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(1, 1), &wsaData);
+    if (iResult != NO_ERROR) {
+        wprintf(L"WSAStartup failed with error: %ld\n", iResult);
+        return 1;
+    }
+#endif
+	
+	int retval = main2(argc, argv);
+	
+#ifdef __WIN32__	
+	WSACleanup();
+#endif
+
+	return retval;
+}
+
+int main2(int argc, char *argv[]) {
     int c;
     bool gdbserver_flag = 0;
     std::string coredumpfile("unknown");
@@ -233,12 +256,6 @@ int main(int argc, char *argv[]) {
     std::vector<std::string> tracer_opts;
     bool tracer_dump_avail = false;
     std::string tracer_avail_out;
-	
-#ifdef __WIN32__
-    WORD versionWanted = MAKEWORD(1, 1);
-    WSADATA wsaData;
-    WSAStartup(versionWanted, &wsaData);
-#endif
     
     while (1) {
         //int this_option_optind = optind ? optind : 1;
