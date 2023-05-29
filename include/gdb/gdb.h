@@ -27,16 +27,7 @@
 #ifndef SIM_GDB_H
 #define SIM_GDB_H
 
-#ifdef __WIN32__
-# include <winsock2.h>
-#else
-# include <sys/socket.h>
-# include <sys/types.h>
-# include <netinet/in.h>
-# include <netinet/tcp.h>
-# include <arpa/inet.h>
-# include <vector>
-#endif
+#include <memory>
 
 #include "config.h"
 #include "avrdevice.h"
@@ -52,59 +43,44 @@
 #define GDB_SIGILL  4      // Illegal instruction (ANSI).
 #define GDB_SIGTRAP 5      // Trace trap (POSIX).
 
-//! Interface for server socket wrapper
+#ifndef DOXYGEN /* have doxygen system ignore this. */
+enum {
+    MAX_READ_RETRY = 50,          /* Maximum number of retries if a read is incomplete. */
+
+    MEM_SPACE_MASK = 0x00ff0000,  /* mask to get bits which determine memory space */
+    FLASH_OFFSET   = 0x00000000,  /* Data in flash has this offset from gdb */
+    SRAM_OFFSET    = 0x00800000,  /* Data in sram has this offset from gdb */
+    EEPROM_OFFSET  = 0x00810000,  /* Data in eeprom has this offset from gdb */
+    SIGNATURE_OFFSET = 0x00840000,/* Present if application used "#include <avr/signature.h>" */
+
+    GDB_BLOCKING_OFF = 0,         /* Signify that a read is non-blocking. */
+    GDB_BLOCKING_ON  = 1,         /* Signify that a read will block. */
+
+    GDB_RET_NOTHING_RECEIVED = -5, /* if the read in non blocking receives nothing, we have nothing todo */ 
+    GDB_RET_SINGLE_STEP = -4,     /* do one single step in gdb loop */
+    GDB_RET_CONTINUE    = -3,     /* step until another command from gdb is received */
+    GDB_RET_CTRL_C       = -2,    /* gdb has sent Ctrl-C to interrupt what is doing */
+    GDB_RET_KILL_REQUEST = -1,    /* gdb has requested that sim be killed */
+    GDB_RET_OK           =  0     /* continue normal processing of gdb requests */ 
+        /* means that we should NOT execute any step!!! */
+};
+#endif /* not DOXYGEN */
+
 class GdbServerSocket {
-    public:
-        virtual void Close(void) = 0;
-        virtual int ReadByte(void) = 0;
-        virtual void Write(const void* buf, size_t count) = 0;
-        virtual void SetBlockingMode(int mode) = 0;
-        virtual bool Connect(void) = 0;
-        virtual void CloseConnection(void) = 0;
-        virtual ~GdbServerSocket() {}
+	public:
+	    GdbServerSocket(int port);
+	    void Close(void);
+        int ReadByte(void);
+        void Write(const void* buf, size_t count);
+        void SetBlockingMode(int mode);
+        bool Connect(void);
+        void CloseConnection(void);
+        ~GdbServerSocket();
+		
+	private:
+		class Impl;
+		std::unique_ptr<Impl> pImpl;
 };
-
-#ifdef __WIN32__
-
-//! Interface implementation for server socket wrapper on Win32 systems
-class GdbServerSocketWin32: public GdbServerSocket {
-    private:
-        int sock;       //!< socket for listening for a new client
-        int conn;       //!< the TCP connection from gdb client
-        struct sockaddr_in address[1];
-
-    public:
-        GdbServerSocketWin32(int port);
-        ~GdbServerSocketWin32() {}
-        virtual void Close(void);
-        virtual int ReadByte(void);
-        virtual void Write(const void* buf, size_t count);
-        virtual void SetBlockingMode(int mode);
-        virtual bool Connect(void);
-        virtual void CloseConnection(void);
-};
-
-#else
-
-//! Interface implementation for server socket wrapper on unix systems
-class GdbServerSocketUnix: public GdbServerSocket {
-    private:
-        int sock;       //!< socket for listening for a new client
-        int conn;       //!< the TCP connection from gdb client
-        struct sockaddr_in address[1];
-
-    public:
-        GdbServerSocketUnix(int port);
-        ~GdbServerSocketUnix() {}
-        virtual void Close(void);
-        virtual int ReadByte(void);
-        virtual void Write(const void* buf, size_t count);
-        virtual void SetBlockingMode(int mode);
-        virtual bool Connect(void);
-        virtual void CloseConnection(void);
-};
-
-#endif
 
 //! GDB server instance to give the possibility to debug target by debugger
 class GdbServer: public SimulationMember {

@@ -74,6 +74,14 @@ CSRC = dumpargs.cpp main.cpp gdbserver.cpp \
 		../libsimulavr/ui.cpp \
 		../libsimulavr/mysocket.cpp
 
+# Add platform-specific network module - manually edit for now...
+
+# Win32
+CSRC += gdbserverwin32.cpp
+
+# Unix
+#CSRC += gdbserverunix.cpp
+
 ##############################################################################
 
 CFLAGS = -I./../include -I./../include/elfio -DHAVE_SYS_MINGW -g
