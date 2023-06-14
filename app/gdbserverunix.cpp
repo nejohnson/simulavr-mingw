@@ -40,7 +40,7 @@
 # include <netinet/in.h>
 # include <netinet/tcp.h>
 # include <arpa/inet.h>
-# include <vector
+# include <vector>
 
 
 
@@ -85,6 +85,8 @@ GdbServerSocket::GdbServerSocket(int port) : pImpl (new Impl) {
     if(listen(pImpl->sock, 1) < 0)
         avr_error("Can not listen on socket: %s", strerror(errno));
 }
+
+GdbServerSocket::~GdbServerSocket() {}
 
 void GdbServerSocket::Close(void) {
     CloseConnection();

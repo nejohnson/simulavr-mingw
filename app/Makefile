@@ -74,17 +74,21 @@ CSRC = dumpargs.cpp main.cpp gdbserver.cpp \
 		../libsimulavr/ui.cpp \
 		../libsimulavr/mysocket.cpp
 
+CFLAGS = -I./../include -I./../include/elfio -g
+
 # Add platform-specific network module - manually edit for now...
 
-# Win32
-CSRC += gdbserverwin32.cpp
-
-# Unix
-#CSRC += gdbserverunix.cpp
+ifneq ($(strip $(MSYSTEM)),)
+	# MinGW/WIn32
+	CSRC    += gdbserverwin32.cpp
+	CFLAGS  += -DHAVE_SYS_MINGW
+	LDFLAGS += -lWs2_32 
+else
+	# Unix
+	CSRC    += gdbserverunix.cpp
+endif
 
 ##############################################################################
-
-CFLAGS = -I./../include -I./../include/elfio -DHAVE_SYS_MINGW -g
 
 OBJS   = $(CSRC:.cpp=.o)
 OBJS  += $(LIBSIMOBJS)
@@ -97,7 +101,7 @@ all: simulavr
 	g++ $(CFLAGS) $< -c -o $@
 
 simulavr: $(OBJS)
-	g++ $(OBJS) -lWs2_32 -o simulavr
+	g++ $(OBJS) $(LDFLAGS) -o simulavr
 
 clean:
 	rm -f $(OBJS)
