@@ -136,9 +136,8 @@ bool GdbServerSocket::Connect(void) {
 int GdbServerSocket::ReadByte(void) {
 	char c;
 	int res;
-	int cnt = MAX_READ_RETRY;
 
-	while(cnt--) {
+	while(1) {
 		res = recv(pImpl->conn, &c, 1, 0);
 		if(res < 0) {
 			if (errno == EAGAIN)
@@ -147,7 +146,10 @@ int GdbServerSocket::ReadByte(void) {
 
 			int iError = WSAGetLastError();
 			if (iError == WSAEWOULDBLOCK)
+			{
+				usleep(1000);
 				continue;
+			}
 			avr_warning("read failed: %d", iError);
 		}
 
