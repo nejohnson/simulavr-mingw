@@ -96,7 +96,7 @@ void GdbServerSocket::Close(void) {
 int GdbServerSocket::ReadByte(void) {
     char c;
     int res;
-    int cnt = MAX_READ_RETRY;
+    int cnt = 0x7FFFFFFF; //MAX_READ_RETRY;
 
     while(cnt--) {
         res = read(pImpl->conn, &c, 1);
